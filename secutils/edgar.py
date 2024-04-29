@@ -134,18 +134,26 @@ class File(FileUtils, ValidateFields):
             'Download File Path': getattr(self, 'download_file_dir', None)
         }, index=[0])
 
+
     def download_file(self, output_dir: str, cache_dir: Optional[str]=None) -> str:
         download_file_dir = os.path.join(output_dir, self.file_name)
         try:
-            path, msg = urlretrieve(self.file_download_url, download_file_dir)
-            # TODO do something better with these messages
-            msg = '200'
-            self.download_file_dir = download_file_dir
-            if cache_dir:
-                self.write_log_record(cache_dir)
-        except (HTTPError, URLError) as e:
-            msg = e
-        return msg
+            headers = {
+                'User-Agent': 'sec-utils'
+            }
+            response = requests.get(self.file_download_url, headers=headers)
+            if response.status_code == 200:
+                with open(download_file_dir, 'wb') as f:
+                    f.write(response.content)
+                self.download_file_dir = download_file_dir
+                if cache_dir:
+                    self.write_log_record(cache_dir)
+                return '200'
+            else:
+                return f"Failed to download file. Status code: {response.status_code}"
+        except requests.exceptions.RequestException as e:
+            return f"Failed to download file. Error: {e}"
+
 
     def write_log_record(self, cache_dir: str):
         parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter, 
