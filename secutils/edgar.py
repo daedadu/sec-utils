@@ -58,7 +58,8 @@ def download_docs(thread_name: str, output_dir: Path, cache_dir: Optional[str]=N
                 sec_container.downloaded.add(sec_file)
                 sec_container.pbar.update(1)
             else:
-                setattr(sec_file, 'error_message')
+                setattr(sec_file, 'error_message',urlmsg)
+                logger.error(f"Error downloading file: {sec_file.file_name} -- {urlmsg}")
                 sec_container.download_error.add(sec_file)
             sec_container.last_url_message = urlmsg
             sec_container.pbar.set_postfix_str(f"Num success: {len(sec_container.downloaded)} -- Num errors: {len(sec_container.download_error)} -- Num remaining: {len(sec_container.to_visit)}")
