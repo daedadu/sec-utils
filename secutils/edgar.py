@@ -78,8 +78,11 @@ class FileUtils(object):
 
     def get_response(self, download_url: str) -> Union[str, str]:
         http = httplib2.Http()
+        headers = {
+                'User-Agent': 'sec-utils'
+            }
         try:
-            status, response = http.request(download_url)
+            status, response = http.request(download_url, headers=headers)
         except Exception:
             raise RuntimeError(f'Unable to parse download url: {download_url}')
             
@@ -206,7 +209,10 @@ class FormIDX(object):
         if self.cache_dir and os.path.exists(cache_file):
             master_index = pd.read_csv(cache_file)
         else:
-            response = requests.get(self.download_url)
+            headers = {
+                'User-Agent': 'sec-utils'
+            }
+            response = requests.get(self.download_url, headers=headers)
             status_code = response.status_code
             if status_code == 200:
                 edgarzipfile = zipfile.ZipFile(io.BytesIO(response.content))
