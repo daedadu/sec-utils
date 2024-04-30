@@ -26,6 +26,24 @@ from secutils.utils import (
 
 logger = logging.getLogger(__name__)
 
+async def fetch(sem, session, job):
+    # sem = asyncio.Semaphore(10) # parallel requests per time unit
+    # session = aiohttp.ClientSession()
+    # job = (url, file_path)
+
+    rate = 1 # time unit on which the rate limiting is applied
+    async with sem, session.get(job[0]) as response:
+        with open(job[1], "wb") as out:
+            async for chunk in response.content.iter_chunked(4096):
+                out.write(chunk)
+        await asyncio.sleep(rate)
+
+async def fetch_all(jobs, loop):
+    limit = 10 # parallel requests per time unit
+    sem = asyncio.Semaphore(limit)
+    async with aiohttp.ClientSession(loop=loop) as session:
+        await asyncio.gather(*[fetch(sem, session, job) for job in jobs])
+
 
 class DocumentDownloaderThread(threading.Thread):
     """
@@ -42,8 +60,20 @@ class DocumentDownloaderThread(threading.Thread):
     def run(self):
         download_docs(self.name, self.output_dir, self.cache_dir)
 
+async def download_docs(output_dir: Path,loop, cache_dir: Optional[str]=None) -> None:
+    sec_container = SECContainer()
+    jobs = []
+    while sec_container.to_visit:
+        sec_file = sec_container.to_visit.pop()
+        form_dir = build_dir_structure(output_dir, sec_file)
+        jobs.append([sec_file, form_dir])
+    limit = 10 # parallel requests per time unit
+    sem = asyncio.Semaphore(limit)
+    async with aiohttp.ClientSession(loop=loop) as session:
+        await asyncio.gather(*[job[0].download_file(sem, session, job[1]) for job in jobs])
 
-def download_docs(thread_name: str, output_dir: Path, cache_dir: Optional[str]=None) -> None:
+
+def download_docs_old(thread_name: str, output_dir: Path, cache_dir: Optional[str]=None) -> None:
     sec_container = SECContainer()
     # while we have pages where we have no downloaded docs
     while sec_container.to_visit:
@@ -134,8 +164,17 @@ class File(FileUtils, ValidateFields):
             'Download File Path': getattr(self, 'download_file_dir', None)
         }, index=[0])
 
+    async def download_file(self, sem, session, output_dir) -> str:
+        rate = 1 # time unit on which the rate limiting is applied
+        file_path = os.path.join(output_dir, self.file_name)
+        async with sem, session.get(self.file_download_url) as response:
+            with open(file_path, "wb") as out:
+                async for chunk in response.content.iter_chunked(4096):
+                    out.write(chunk)
+            await asyncio.sleep(rate)        
+        
 
-    def download_file(self, output_dir: str, cache_dir: Optional[str]=None) -> str:
+    def download_file_old(self, output_dir: str, cache_dir: Optional[str]=None) -> str:
         download_file_dir = os.path.join(output_dir, self.file_name)
         try:
             headers = {
