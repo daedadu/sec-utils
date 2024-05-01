@@ -84,7 +84,7 @@ def main():
 
     
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(download_docs(args.output_dir,args.num_workers loop))
+    loop.run_until_complete(download_docs(args.output_dir,args.num_workers,loop))
     later_as_datetime_obj = datetime.now()
     time_difference = later_as_datetime_obj - now_as_datetime_obj
     total_seconds = time_difference.seconds
