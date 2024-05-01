@@ -44,8 +44,10 @@ def main():
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                        datefmt='%m/%d/%Y %H:%M:%S',
+                        datefmt = '%Y.%m.%d | %H:%M:%S |',
                         level=getattr(logging, args.log_level))
+
+    now_as_datetime_obj = datetime.now()
 
     if args.num_workers == -1:
         args.num_workers = multiprocessing.cpu_count()
@@ -83,6 +85,14 @@ def main():
     
     loop = asyncio.get_event_loop()
     loop.run_until_complete(download_docs(args.output_dir, loop))
+    later_as_datetime_obj = datetime.now()
+    time_difference = later_as_datetime_obj - now_as_datetime_obj
+    total_seconds = time_difference.seconds
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    runtime_string = "The script took {}h:{}m:{}s.".format(hours,minutes,seconds)
+    logger.info(runtime_string)
 
 if __name__ == '__main__':
     main()
