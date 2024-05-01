@@ -18,6 +18,9 @@ import ftfy
 import pandas as pd
 import validators
 import httplib2
+import asyncio
+import aiohttp
+
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
@@ -61,6 +64,7 @@ class DocumentDownloaderThread(threading.Thread):
         download_docs(self.name, self.output_dir, self.cache_dir)
 
 async def download_docs(output_dir: Path,loop, cache_dir: Optional[str]=None) -> None:
+    import asyncio
     sec_container = SECContainer()
     jobs = []
     while sec_container.to_visit:
@@ -167,7 +171,10 @@ class File(FileUtils, ValidateFields):
     async def download_file(self, sem, session, output_dir) -> str:
         rate = 1 # time unit on which the rate limiting is applied
         file_path = os.path.join(output_dir, self.file_name)
-        async with sem, session.get(self.file_download_url) as response:
+        headers = {
+            'User-Agent': 'sec-utils'
+        }
+        async with sem, session.get(self.file_download_url, headers=headers) as response:
             with open(file_path, "wb") as out:
                 async for chunk in response.content.iter_chunked(4096):
                     out.write(chunk)

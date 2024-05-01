@@ -7,3 +7,5 @@ pandas
 requests
 pyyaml
 dataclasses
+aiohttp
+asyncio

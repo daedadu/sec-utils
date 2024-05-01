@@ -10,10 +10,11 @@ from typing import List
 
 from tqdm.auto import tqdm
 
-from secutils.edgar import FormIDX, SECContainer, DocumentDownloaderThread
+from secutils.edgar import FormIDX, SECContainer, DocumentDownloaderThread, download_docs
 from secutils.utils import scan_output_dir, _read_cik_config, yaml_config_to_args
 
 logger = logging.getLogger(__name__)
+import asyncio
 
 
 def main():
@@ -69,16 +70,19 @@ def main():
                form_types=args.form_types, ciks=args.ciks).index_to_files()
         if len(files) > 0:
             sec_container.to_visit.update(files)
-            with tqdm(total=len(sec_container.to_visit), desc=f"Downloading: Year: {yr} - Quarter: {qtr}") as pbar:
-                # create threads and distribute downloads
-                sec_container.pbar = pbar
-                logger.info(f'Creating {args.num_workers} download threads')
-                threads = [DocumentDownloaderThread(i, f'thread-{i}', args.output_dir, args.cache_dir) for i in range(args.num_workers)]
-                # start threads
-                [thread.start() for thread in threads]
-                # delay execution of remaining script until all threads complete
-                [thread.join() for thread in threads]
+            # with tqdm(total=len(sec_container.to_visit), desc=f"Downloading: Year: {yr} - Quarter: {qtr}") as pbar:
+            #     # create threads and distribute downloads
+            #     sec_container.pbar = pbar
+            #     logger.info(f'Creating {args.num_workers} download threads')
+            #     threads = [DocumentDownloaderThread(i, f'thread-{i}', args.output_dir, args.cache_dir) for i in range(args.num_workers)]
+            #     # start threads
+            #     [thread.start() for thread in threads]
+            #     # delay execution of remaining script until all threads complete
+            #     [thread.join() for thread in threads]
 
+    
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(download_docs(args.output_dir, loop))
 
 if __name__ == '__main__':
     main()
