@@ -16,6 +16,25 @@ def get_form_file_paths(output_dir : str, form_type : str, year : int, quarter) 
     form_file_paths.extend(list(Path(form_folder).rglob('*.txt')))
     return form_file_paths
 
+# create dictionary that contains the search term(s) as key and the file path as value
+def build_single_file_index(form_file_path : str, search_terms : List[str]) -> dict:
+    index = {}
+    with open(form_file_path, 'r') as file:
+        for line in file:
+            for term in search_terms:
+                if term in line:
+                    index[term] = form_file_path
+    return index
+
+# create dictionary that contains the global index of all search terms
+def build_global_index(indexfiles : List[dict]) -> dict:
+    merged_dict = {}
+
+    for d in indexfiles:
+        for k, v in d.items():
+            merged_dict[k].append(v)
+
+    return merged_dict
 
 def main():
     parser = argparse.ArgumentParser()
