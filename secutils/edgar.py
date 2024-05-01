@@ -9,8 +9,8 @@ import logging
 import pickle as pkl
 from pathlib import Path
 from datetime import datetime
-from urllib.error import HTTPError, URLError
-from urllib.request import urlretrieve
+
+
 from typing import List, Union, Optional
 from urllib.parse import urlparse, urljoin
 
