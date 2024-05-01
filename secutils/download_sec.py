@@ -50,7 +50,7 @@ def main():
     now_as_datetime_obj = datetime.now()
 
     if args.num_workers == -1:
-        args.num_workers = multiprocessing.cpu_count()
+        args.num_workers = 10
 
     # init container
     sec_container = SECContainer()
@@ -84,7 +84,7 @@ def main():
 
     
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(download_docs(args.output_dir, loop))
+    loop.run_until_complete(download_docs(args.output_dir,args.num_workers loop))
     later_as_datetime_obj = datetime.now()
     time_difference = later_as_datetime_obj - now_as_datetime_obj
     total_seconds = time_difference.seconds
