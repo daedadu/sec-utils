@@ -2,16 +2,19 @@ import logging
 from datetime import datetime
 import argparse
 from pathlib import Path
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 # get form file paths from start year to end year and for defined quarters 
-def get_form_file_paths(output_dir : str, form_type : str, year : int, quarters) -> List[str]:
-    form_file_paths = []
-    form_type = sec_file.form_type.replace('/', '')
-    for quarter in quarters:
-        form_file_paths.append(f"{output_dir}/{form_type}/{year}/QTR{quarter}")
+def get_form_file_paths(output_dir : str, form_type : str, year : int, quarter) -> List[str]:
+    form_type = form_type.replace('/', '')
+    form_folder = f"{output_dir}/{form_type}/{year}/Q{quarter}"
 
+    # get all txt files in the form folder
+    form_file_paths = []
+    form_file_paths.extend(list(Path(form_folder).rglob('*.txt')))
+    return form_file_paths
 
 
 def main():
