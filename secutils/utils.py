@@ -160,3 +160,38 @@ class ValidateFields(object):
         date_filed = ValidateFields.validate_date_filed(date_filed)
         partial_url = ValidateFields.validate_form_name(partial_url)
         return (cik, company_name, form_type, date_filed, partial_url)
+    
+
+# get form file paths from start year to end year and for defined quarters 
+def get_form_file_paths(output_dir : str, form_type : str, year : int, quarter) -> List[str]:
+    form_type = form_type.replace('/', '')
+    form_folder = f"{output_dir}/{form_type}/{year}/Q{quarter}"
+
+    # get all txt files in the form folder with the os.path module
+    form_file_paths = []
+    for root, dirs, files in os.walk(form_folder):
+        for name in files:
+            if name.endswith('.txt'):
+                form_file_paths.append(os.path.join(root, name))
+
+    return form_file_paths
+    
+# create dictionary that contains the search term(s) as key and the file path as value
+def build_single_file_index(form_file_path : str, search_terms : List[str]) -> dict:
+    index = {}
+    with open(form_file_path, 'r') as file:
+        for line in file:
+            for term in search_terms:
+                if term in line:
+                    index[term] = form_file_path
+    return index
+
+# create dictionary that contains the global index of all search terms
+def build_global_index(indexfiles : List[dict]) -> dict:
+    merged_dict = {}
+
+    for d in indexfiles:
+        for k, v in d.items():
+            merged_dict[k].append(v)
+
+    return merged_dict

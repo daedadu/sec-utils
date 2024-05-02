@@ -4,7 +4,8 @@ from datetime import datetime
 
 from secutils.utils import (scan_output_dir, _remove_bad_bytes, 
                             _to_quarter, ValidateFields, 
-                            _read_cik_config, generate_config)
+                            _read_cik_config, generate_config, get_form_file_paths,
+                            build_single_file_index, build_global_index)
 
 class TestUtils(unittest.TestCase):
 
@@ -76,6 +77,19 @@ class TestUtils(unittest.TestCase):
         msg = f"Expected files to be found - got {len(seen_files)} when expected {len(text_files)}"
         self.assertSequenceEqual(seen_files, text_files, msg)
     
+    def test_get_form_file_paths(self):
+        output_dir = os.path.dirname(__file__)
+        form_type = '8-K'
+        year = 2022
+        quarter = 1
+        expected_form_file_paths = [
+            os.path.join(output_dir,'8-K','2022','Q1','0000020212-22-000063.txt'),
+            os.path.join(output_dir,'8-K','2022','Q1','0000020286-22-000014.txt'),
+            os.path.join(output_dir,'8-K','2022','Q1','0000021175-22-000029.txt'),
+        ]
+        form_file_paths = get_form_file_paths(output_dir, form_type, year, quarter)
+        msg = f"Expected list of files - got {form_file_paths}"
+        self.assertListEqual(form_file_paths,expected_form_file_paths, msg)
 
 if __name__ == "__main__":
     unittest.main()
