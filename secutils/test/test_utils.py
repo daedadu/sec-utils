@@ -91,6 +91,18 @@ class TestUtils(unittest.TestCase):
         msg = f"Expected list of files - got {form_file_paths}"
         self.assertListEqual(form_file_paths,expected_form_file_paths, msg)
 
+    def test_build_single_file_index(self):
+        output_dir = os.path.dirname(__file__)
+        current_file = os.path.join(output_dir,'8-K','2022','Q1','0000020212-22-000063.txt')
+        single_file_index = build_single_file_index(current_file,['announced','Chasers'])
+
+        expected_index = {
+            'announced' :str(current_file),
+            'Chasers':str(current_file)
+        }
+        msg = f"Expected single file index to be {expected_index} - got {single_file_index}"
+        self.assertEqual(single_file_index, expected_index, msg)
+
 if __name__ == "__main__":
     unittest.main()
 

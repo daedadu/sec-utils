@@ -182,7 +182,7 @@ def build_single_file_index(form_file_path : str, search_terms : List[str]) -> d
     with open(form_file_path, 'r') as file:
         for line in file:
             for term in search_terms:
-                if term in line:
+                if term.lower() in line.lower():
                     index[term] = form_file_path
     return index
 
