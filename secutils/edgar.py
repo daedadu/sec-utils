@@ -30,21 +30,6 @@ from secutils.utils import (
 logger = logging.getLogger(__name__)
 
 
-class DocumentDownloaderThread(threading.Thread):
-    """
-    thread for downloading docs in parallel
-    
-    adapted from: https://github.com/freephys/Learning-Python-Design-Patterns/blob/master/2_singleton/crawler.py
-    """
-    def __init__(self, thread_id: int, name: str, output_dir: Path, cache_dir: Optional[str]=None) -> None:
-        threading.Thread.__init__(self)
-        self.name = name
-        self.output_dir = output_dir
-        self.cache_dir = cache_dir
-
-    def run(self):
-        download_docs(self.name, self.output_dir, self.cache_dir)
-
 async def download_docs(output_dir: Path,loop, num_workers, cache_dir: Optional[str]=None) -> None:
     import asyncio
     sec_container = SECContainer()
@@ -61,27 +46,6 @@ async def download_docs(output_dir: Path,loop, num_workers, cache_dir: Optional[
     async with aiohttp.ClientSession(loop=loop) as session:
         await asyncio.gather(*[job[0].download_file(sem, session, job[1]) for job in jobs])
 
-
-def download_docs_old(thread_name: str, output_dir: Path, cache_dir: Optional[str]=None) -> None:
-    sec_container = SECContainer()
-    # while we have pages where we have no downloaded docs
-    while sec_container.to_visit:
-        if '429' in sec_container.last_url_message:
-            time.sleep(random.randint(1, 10))
-        else:
-            sec_file = sec_container.to_visit.pop()
-            form_dir = build_dir_structure(output_dir, sec_file)
-            time.sleep(random.randint(1, 10))
-            urlmsg = sec_file.download_file(form_dir, cache_dir)
-            if urlmsg == '200':
-                sec_container.downloaded.add(sec_file)
-                sec_container.pbar.update(1)
-            else:
-                setattr(sec_file, 'error_message',urlmsg)
-                logger.error(f"Error downloading file: {sec_file.file_name} -- {urlmsg}")
-                sec_container.download_error.add(sec_file)
-            sec_container.last_url_message = urlmsg
-            sec_container.pbar.set_postfix_str(f"Num success: {len(sec_container.downloaded)} -- Num errors: {len(sec_container.download_error)} -- Num remaining: {len(sec_container.to_visit)}")
 
 
 class SECContainer(object):
@@ -165,26 +129,6 @@ class File(FileUtils, ValidateFields):
                     out.write(chunk)
             await asyncio.sleep(rate)        
         
-
-    def download_file_old(self, output_dir: str, cache_dir: Optional[str]=None) -> str:
-        download_file_dir = os.path.join(output_dir, self.file_name)
-        try:
-            headers = {
-                'User-Agent': 'sec-utils'
-            }
-            response = requests.get(self.file_download_url, headers=headers)
-            if response.status_code == 200:
-                with open(download_file_dir, 'wb') as f:
-                    f.write(response.content)
-                self.download_file_dir = download_file_dir
-                if cache_dir:
-                    self.write_log_record(cache_dir)
-                return '200'
-            else:
-                return f"Failed to download file. Status code: {response.status_code}"
-        except requests.exceptions.RequestException as e:
-            return f"Failed to download file. Error: {e}"
-
 
     def write_log_record(self, cache_dir: str):
         parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter, 
