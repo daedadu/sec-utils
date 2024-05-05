@@ -371,17 +371,34 @@ class FormIDX_search(FormIDX):
                         
         return results
         
-
-
-
-   'q=merger&filter_forms=8-K&page=2&from=100&startdt=2019-05-04&enddt=2024-05-04'
-
     def _parse_search_results(self, response: json) -> dict:
         """
         Parse the json response from the SEC search query and create a list of File objects.
         """
         results = {}
         results[hits] = response['hits']
+        return results
+
+    def index_to_files(self) -> List[File]:
+        files = []
+        hits = self.query_results['hits']
+        for element in hits:
+            cik = element['source']['ciks']
+            if len(cik) > 1:
+                raise ValueError(f"Multiple CIK's found for result: {element['source']}")
+            company_name = element['source']['display_names']
+            form_type = element['source']['root_form']
+            date_filed = element['source']['file_date']
+            partial_url = element['source']['adsh']
+
+            files.append(File(
+                    form_type=form_type,
+                    company_name=company_name,
+                    cik_number=cik,
+                    date_filed=date_filed,
+                    partial_url=partial_url,
+                ))
+        return files
         
 
 
