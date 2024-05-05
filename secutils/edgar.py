@@ -8,7 +8,7 @@ import threading
 import logging
 import pickle as pkl
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 from typing import List, Union, Optional
@@ -293,3 +293,95 @@ def build_dir_structure(output_dir: str, sec_file: File) -> str:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     return output_dir
+
+class FormIDX_search(FormIDX):
+    """
+    FormIDX_search is a utility class to allow access to the search function on SEC's EDGAR database.
+    The search function allows users to search for specific forms by company name, CIK, form type, and date filed.
+    """
+    
+    base_search_url = 'https://efts.sec.gov/LATEST/search-index'
+
+    def __init__(self, form_type: str=None, start_date : datetime=None, end_date : datetime=None, search_terms: str=None) -> None:
+        self.form_type = form_type
+        self.start_date = start_date
+        self.end_date = end_date
+        self.search_term = search_term
+        self.query_results = self._query_sec()
+
+    def _query_sec(self) -> dict:
+        """
+        Query the SEC's EDGAR database using the search function and return a json object of the results.
+        """
+
+        # this is the max results that the search website returns
+        # that is why we have to make our requests smaller if we get that aomutn of results
+        total_hits = 10000
+        max_hits = 10000
+        page_size = 100
+        num_pages = 0
+        start_date = self.start_date
+        # this is a trick to jump into the while loop
+        end_date = self.end_date-timedelta(days=1)
+        results = {}
+
+        headers = {
+                'User-Agent': 'sec-utils'
+                'q' = self.search_term,
+                'filter_forms' = self.form_type,
+                'page' = '1',
+                'startdt' = start_date.strftime('%Y-%m-%d'),
+                'enddt' = end_date.strftime('%Y-%m-%d')
+            }
+
+        # find the time range that doesn't overwhelm the search results and delivers results less 10000
+        while end_date <= self.end_date
+                response = requests.get(search_url)
+                if response.status_code == 200:
+                    query_result = self._parse_search_results(response.json)
+                else:
+                    # raise error and show status code and request header
+                    raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
+
+                total_hits = query_result['hits']['total']['value']
+
+                # to many results
+                if = max_hits:
+                    time_step = (end_date - start_date)/2
+                    end_date = start_date + time_step
+                    header['startdt'] = start_date.strftime('%Y-%m-%d')
+                    header['enddt'] = end_date.strftime('%Y-%m-%d')
+                # we have a time window that appears to be small enough 
+                else:
+                    num_pages = total_hits // page_size + 1
+                    current_page = 1
+                    while current_page <= num_pages:
+                        header['page'] = current_page
+                        response = requests.get(search_url)
+                        if response.status_code == 200:
+                            query_result = self._parse_search_results(response.json)
+                        else:
+                            raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
+                        current_page += 1
+                        # check if key hits exits
+                        if 'hits' in results:
+                            results['hits'].extend(query_result['hits'])
+                        else:
+                            results['hits'] = query_result['hits']
+                        
+        return results
+        
+
+
+
+   'q=merger&filter_forms=8-K&page=2&from=100&startdt=2019-05-04&enddt=2024-05-04'
+
+    def _parse_search_results(self, response: json) -> dict:
+        """
+        Parse the json response from the SEC search query and create a list of File objects.
+        """
+        results = {}
+        results[hits] = response['hits']
+        
+
+
