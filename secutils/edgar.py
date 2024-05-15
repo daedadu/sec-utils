@@ -325,18 +325,18 @@ class FormIDX_search(FormIDX):
         end_date = self.end_date-timedelta(days=1)
         results = {}
 
-        headers = {
-                'User-Agent': 'sec-utils'
-                'q' = self.search_term,
-                'filter_forms' = self.form_type,
-                'page' = '1'
+        header = {
+                'User-Agent': 'sec-utils',
+                'q': self.search_term,
+                'filter_forms': self.form_type,
+                'page': '1'
             }
 
         # find the time range that doesn't overwhelm the search results and delivers results less 10000
         while end_date <= self.end_date:
-            headers['startdt'] = start_date.strftime('%Y-%m-%d')
-            headers['enddt'] = end_date.strftime('%Y-%m-%d')
-            response = requests.get(search_url, headers=headers)
+            header['startdt'] = start_date.strftime('%Y-%m-%d')
+            header['enddt'] = end_date.strftime('%Y-%m-%d')
+            response = requests.get(self.base_search_url, headers=header)
             if response.status_code == 200:
                 query_result = self._parse_search_results(response.json)
             else:
@@ -357,7 +357,7 @@ class FormIDX_search(FormIDX):
                 current_page = 1
                 while current_page <= num_pages:
                     header['page'] = current_page
-                    response = requests.get(search_url)
+                    response = requests.get(self.base_search_url, headers=header)
                     if response.status_code == 200:
                         query_result = self._parse_search_results(response.json)
                     else:
@@ -368,15 +368,14 @@ class FormIDX_search(FormIDX):
                         results['hits'].extend(query_result['hits'])
                     else:
                         results['hits'] = query_result['hits']
-                        
         return results
-        
-    def _parse_search_results(self, response: json) -> dict:
+
+    def _parse_search_results(self, response: dict) -> dict:
         """
         Parse the json response from the SEC search query and create a list of File objects.
         """
         results = {}
-        results[hits] = response['hits']
+        results['hits'] = response['hits']
         return results
 
     def index_to_files(self) -> List[File]:
