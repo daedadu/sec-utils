@@ -329,45 +329,45 @@ class FormIDX_search(FormIDX):
                 'User-Agent': 'sec-utils'
                 'q' = self.search_term,
                 'filter_forms' = self.form_type,
-                'page' = '1',
-                'startdt' = start_date.strftime('%Y-%m-%d'),
-                'enddt' = end_date.strftime('%Y-%m-%d')
+                'page' = '1'
             }
 
         # find the time range that doesn't overwhelm the search results and delivers results less 10000
-        while end_date <= self.end_date
-                response = requests.get(search_url)
-                if response.status_code == 200:
-                    query_result = self._parse_search_results(response.json)
-                else:
-                    # raise error and show status code and request header
-                    raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
+        while end_date <= self.end_date:
+            headers['startdt'] = start_date.strftime('%Y-%m-%d')
+            headers['enddt'] = end_date.strftime('%Y-%m-%d')
+            response = requests.get(search_url, headers=headers)
+            if response.status_code == 200:
+                query_result = self._parse_search_results(response.json)
+            else:
+                # raise error and show status code and request header
+                raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
 
-                total_hits = query_result['hits']['total']['value']
+            total_hits = query_result['hits']['total']['value']
 
-                # to many results
-                if = max_hits:
-                    time_step = (end_date - start_date)/2
-                    end_date = start_date + time_step
-                    header['startdt'] = start_date.strftime('%Y-%m-%d')
-                    header['enddt'] = end_date.strftime('%Y-%m-%d')
-                # we have a time window that appears to be small enough 
-                else:
-                    num_pages = total_hits // page_size + 1
-                    current_page = 1
-                    while current_page <= num_pages:
-                        header['page'] = current_page
-                        response = requests.get(search_url)
-                        if response.status_code == 200:
-                            query_result = self._parse_search_results(response.json)
-                        else:
-                            raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
-                        current_page += 1
-                        # check if key hits exits
-                        if 'hits' in results:
-                            results['hits'].extend(query_result['hits'])
-                        else:
-                            results['hits'] = query_result['hits']
+            # too many results
+            if total_hits == max_hits:
+                time_step = (end_date - start_date)/2
+                end_date = start_date + time_step
+                header['startdt'] = start_date.strftime('%Y-%m-%d')
+                header['enddt'] = end_date.strftime('%Y-%m-%d')
+            # we have a time window that appears to be small enough 
+            else:
+                num_pages = total_hits // page_size + 1
+                current_page = 1
+                while current_page <= num_pages:
+                    header['page'] = current_page
+                    response = requests.get(search_url)
+                    if response.status_code == 200:
+                        query_result = self._parse_search_results(response.json)
+                    else:
+                        raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
+                    current_page += 1
+                    # check if key hits exits
+                    if 'hits' in results:
+                        results['hits'].extend(query_result['hits'])
+                    else:
+                        results['hits'] = query_result['hits']
                         
         return results
         
