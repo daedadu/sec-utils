@@ -86,7 +86,8 @@ def main():
         logger.info(f'Searching for search term: {args.search_term}')
         start_date = dateutil_parser.parse(args.start_year)
         end_date = dateutil_parser.parse(args.end_year)
-        files = FormIDX_search(form_types=args.form_types, start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
+        #TODO fix this to allow for multiple form types
+        files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
         sec_container.to_visit.update(files)
     
     loop = asyncio.get_event_loop()

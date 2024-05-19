@@ -302,7 +302,7 @@ class FormIDX_search(FormIDX):
     
     base_search_url = 'https://efts.sec.gov/LATEST/search-index'
 
-    def __init__(self, form_type: str=None, start_date : datetime=None, end_date : datetime=None, search_terms: str=None) -> None:
+    def __init__(self, form_type: str=None, start_date : datetime=None, end_date : datetime=None, search_term: str=None) -> None:
         self.form_type = form_type
         self.start_date = start_date
         self.end_date = end_date
@@ -317,49 +317,65 @@ class FormIDX_search(FormIDX):
         # this is the max results that the search website returns
         # that is why we have to make our requests smaller if we get that aomutn of results
         total_hits = 10000
-        max_hits = 10000
+        max_hits = 1000
         page_size = 100
         num_pages = 0
         start_date = self.start_date
         # this is a trick to jump into the while loop
-        end_date = self.end_date-timedelta(days=1)
+        end_date = self.end_date
         results = {}
 
         header = {
-                'User-Agent': 'sec-utils',
-                'q': self.search_term,
-                'filter_forms': self.form_type,
-                'page': '1'
+                'User-Agent': 'sec-utils'
             }
 
+        params = {
+            'q': self.search_term,
+            'category' : 'custom',
+            'startdt' : start_date.strftime('%Y-%m-%d'),
+            'enddt' : end_date.strftime('%Y-%m-%d'),
+            'filter_forms': self.form_type,
+            'page': '1'
+        }
+        # only needed for while loop condition
+        temp_end_date = self.end_date + timedelta(days=1)
+
         # find the time range that doesn't overwhelm the search results and delivers results less 10000
-        while end_date <= self.end_date:
-            header['startdt'] = start_date.strftime('%Y-%m-%d')
-            header['enddt'] = end_date.strftime('%Y-%m-%d')
-            response = requests.get(self.base_search_url, headers=header)
+        while end_date < temp_end_date:
+            response = requests.get(self.base_search_url, headers=header, params=params)
+            logger.info(f'inside outside while loop : {response.url}')
+            
+            # print response url
             if response.status_code == 200:
-                query_result = self._parse_search_results(response.json)
+                query_result = self._parse_search_results(response.json())
             else:
                 # raise error and show status code and request header
                 raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
 
             total_hits = query_result['hits']['total']['value']
+            logger.info(f"Found {total_hits} hits.")
 
             # too many results
-            if total_hits == max_hits:
-                time_step = (end_date - start_date)/2
+            if total_hits >= max_hits:
+                # calculate time step from end and start date and floor the days
+                time_step = timedelta(days= ((end_date - start_date) / 2).days)
                 end_date = start_date + time_step
-                header['startdt'] = start_date.strftime('%Y-%m-%d')
-                header['enddt'] = end_date.strftime('%Y-%m-%d')
+                logger.info(f"Current time step: {time_step}")
+                logger.info(f"Trying out start_date : {start_date.strftime('%Y-%m-%d')}")
+                logger.info(f"Trying out end_date   : {end_date.strftime('%Y-%m-%d')}")
+                params['startdt'] = start_date.strftime('%Y-%m-%d')
+                params['enddt'] = end_date.strftime('%Y-%m-%d')
             # we have a time window that appears to be small enough 
             else:
                 num_pages = total_hits // page_size + 1
+                logger.info(f"num_page : {num_pages}")
                 current_page = 1
                 while current_page <= num_pages:
-                    header['page'] = current_page
-                    response = requests.get(self.base_search_url, headers=header)
+                    params['page'] = str(current_page)
+                    response = requests.get(self.base_search_url, headers=header, params=params)
+                    logger.info(f'inside inner while loop : {response.url}' )
                     if response.status_code == 200:
-                        query_result = self._parse_search_results(response.json)
+                        query_result = self._parse_search_results(response.json())
                     else:
                         raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
                     current_page += 1
@@ -367,7 +383,14 @@ class FormIDX_search(FormIDX):
                     if 'hits' in results:
                         results['hits'].extend(query_result['hits'])
                     else:
-                        results['hits'] = query_result['hits']
+                        results['hits'] = [query_result['hits']]
+                current_page = 1
+                start_date = end_date + timedelta(days=1)
+                end_date = min(start_date + time_step, temp_end_date)
+                params['startdt'] = start_date.strftime('%Y-%m-%d')
+                params['enddt'] = end_date.strftime('%Y-%m-%d')
+                logger.info(f"new start date: {params['startdt']}")
+                logger.info(f"new end date: {params['enddt']}")
         return results
 
     def _parse_search_results(self, response: dict) -> dict:
