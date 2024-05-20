@@ -1,18 +1,13 @@
 import os
 import io
-import time
-import random
 import zipfile
 import requests
-import threading
 import logging
-import pickle as pkl
 from pathlib import Path
 from datetime import datetime, timedelta
 
 
 from typing import List, Union, Optional
-from urllib.parse import urlparse, urljoin
 
 import ftfy
 import pandas as pd
@@ -21,6 +16,7 @@ import httplib2
 import asyncio
 import aiohttp
 import json
+from urllib.parse import urljoin
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
