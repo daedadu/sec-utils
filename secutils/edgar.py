@@ -20,7 +20,7 @@ import validators
 import httplib2
 import asyncio
 import aiohttp
-
+import json
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
@@ -38,7 +38,6 @@ async def download_docs(output_dir: Path,loop, num_workers, cache_dir: Optional[
         sec_file = sec_container.to_visit.pop()
         form_dir = build_dir_structure(output_dir, sec_file)
         jobs.append([sec_file, form_dir])
-
 
     logger.info(f"Downloading {len(jobs)} files")
     logger.info(f"Number of workers: {num_workers}")
@@ -68,7 +67,7 @@ class FileUtils(object):
             status, response = http.request(download_url, headers=headers)
         except Exception:
             raise RuntimeError(f'Unable to parse download url: {download_url}')
-            
+
         try:
             response = response.decode('utf-8')
         except UnicodeDecodeError:
@@ -84,13 +83,13 @@ class FileUtils(object):
 
 
 class File(FileUtils, ValidateFields):
-    
-    def __init__(self, form_type: str, company_name: str, cik_number: str, 
+
+    def __init__(self, form_type: str, company_name: str, cik_number: str,
                 date_filed: str, partial_url: str=None) -> None:
 
         # validate fields
         cik_number, company_name, form_type, date_filed, partial_url = self.validate_index_line(
-            cik=cik_number, 
+            cik=cik_number,
             company_name=company_name,
             form_type=form_type,
             date_filed=date_filed,
@@ -123,15 +122,16 @@ class File(FileUtils, ValidateFields):
         headers = {
             'User-Agent': 'sec-utils'
         }
+        logger.info(f"Downloading file: {self.file_name} from {self.file_download_url} to {file_path}")
         async with sem, session.get(self.file_download_url, headers=headers) as response:
+            assert response.status == 200
             with open(file_path, "wb") as out:
                 async for chunk in response.content.iter_chunked(4096):
                     out.write(chunk)
-            await asyncio.sleep(rate)        
-        
+            await asyncio.sleep(rate)
 
     def write_log_record(self, cache_dir: str):
-        parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter, 
+        parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter,
                 self.file_download_url, self.download_file_dir]
         parts = list(map(str, parts))
         line = '|'.join(parts)
@@ -143,7 +143,7 @@ class File(FileUtils, ValidateFields):
 
 class FormIDX(object):
     """
-    FormIDX is a utility class to capture master.idx zip files and construct a parsable data structure. 
+    FormIDX is a utility class to capture master.idx zip files and construct a parsable data structure.
     Each file user specifies to download is converted into a File class, where file downloads can occur.
 
     Parameters
@@ -172,8 +172,8 @@ class FormIDX(object):
     """
     full_index_url = 'https://www.sec.gov/Archives/edgar/full-index/{year}/QTR{quarter}/master.zip'
 
-    def __init__(self, year: int, quarter: int, seen_files: Optional[List[str]] = None, 
-                cache_dir: Optional[str]=None, form_types: Optional[List[str]]=None, 
+    def __init__(self, year: int, quarter: int, seen_files: Optional[List[str]] = None,
+                cache_dir: Optional[str]=None, form_types: Optional[List[str]]=None,
                 ciks: Optional[int]=None):
         self.year = year
         self.quarter = quarter
@@ -233,7 +233,7 @@ class FormIDX(object):
 
     def _filter_form_type(self, master_index: pd.DataFrame) -> pd.DataFrame:
         """
-        Filter FormIDX to specific form types. For example, if FormIDX(form_types=['S-1', 'S-1/A'], year=2018, quarter=4), 
+        Filter FormIDX to specific form types. For example, if FormIDX(form_types=['S-1', 'S-1/A'], year=2018, quarter=4),
         all S-1 and S-1/A forms from 2018, Q4 will be retrieved
 
         Args:
@@ -258,7 +258,7 @@ class FormIDX(object):
         return master_index
 
     def _filter_seen_files(self, master_index: pd.DataFrame) -> pd.DataFrame:
-        og_shape = master_index.shape[0]   
+        og_shape = master_index.shape[0]
         if self.seen_files:
             master_index = master_index.loc[~master_index['fname'].isin(self.seen_files)]
             num_prior_download = og_shape-master_index.shape[0]
@@ -285,7 +285,7 @@ class FormIDX(object):
                 ))
         return files
 
-def build_dir_structure(output_dir: str, sec_file: File) -> str: 
+def build_dir_structure(output_dir: str, sec_file: File) -> str:
     # build output dir
     # modify form type due to forms like S-1/A
     form_type = sec_file.form_type.replace('/', '')
@@ -299,7 +299,7 @@ class FormIDX_search(FormIDX):
     FormIDX_search is a utility class to allow access to the search function on SEC's EDGAR database.
     The search function allows users to search for specific forms by company name, CIK, form type, and date filed.
     """
-    
+
     base_search_url = 'https://efts.sec.gov/LATEST/search-index'
 
     def __init__(self, form_type: str=None, start_date : datetime=None, end_date : datetime=None, search_term: str=None) -> None:
@@ -316,15 +316,14 @@ class FormIDX_search(FormIDX):
 
         # this is the max results that the search website returns
         # that is why we have to make our requests smaller if we get that aomutn of results
-        total_hits = 10000
-        max_hits = 1000
+        max_hits = 10000
         page_size = 100
         num_pages = 0
         start_date = self.start_date
         # this is a trick to jump into the while loop
         end_date = self.end_date
         results = {}
-
+        time_step = timedelta(days=0)
         header = {
                 'User-Agent': 'sec-utils'
             }
@@ -334,17 +333,14 @@ class FormIDX_search(FormIDX):
             'category' : 'custom',
             'startdt' : start_date.strftime('%Y-%m-%d'),
             'enddt' : end_date.strftime('%Y-%m-%d'),
-            'filter_forms': self.form_type,
-            'page': '1'
+            'filter_forms': self.form_type
         }
-        # only needed for while loop condition
-        temp_end_date = self.end_date + timedelta(days=1)
 
         # find the time range that doesn't overwhelm the search results and delivers results less 10000
-        while end_date < temp_end_date:
+        while start_date < end_date:
             response = requests.get(self.base_search_url, headers=header, params=params)
-            logger.info(f'inside outside while loop : {response.url}')
-            
+            logger.info(f'inside outer while loop : {response.url}')
+
             # print response url
             if response.status_code == 200:
                 query_result = self._parse_search_results(response.json())
@@ -355,9 +351,11 @@ class FormIDX_search(FormIDX):
             total_hits = query_result['hits']['total']['value']
             logger.info(f"Found {total_hits} hits.")
 
+
             # too many results
             if total_hits >= max_hits:
                 # calculate time step from end and start date and floor the days
+                logger.info("Reducing time window...")
                 time_step = timedelta(days= ((end_date - start_date) / 2).days)
                 end_date = start_date + time_step
                 logger.info(f"Current time step: {time_step}")
@@ -365,13 +363,18 @@ class FormIDX_search(FormIDX):
                 logger.info(f"Trying out end_date   : {end_date.strftime('%Y-%m-%d')}")
                 params['startdt'] = start_date.strftime('%Y-%m-%d')
                 params['enddt'] = end_date.strftime('%Y-%m-%d')
-            # we have a time window that appears to be small enough 
+            # we have a time window that appears to be small enough
             else:
+                if 'hits' in results:
+                    results['hits'].extend(query_result['hits']['hits'])
+                else:
+                    results['hits'] = query_result['hits']['hits']
                 num_pages = total_hits // page_size + 1
-                logger.info(f"num_page : {num_pages}")
-                current_page = 1
+                logger.info(f"Retrieving num_pages : {num_pages}")
+                current_page = 2
                 while current_page <= num_pages:
                     params['page'] = str(current_page)
+                    params['from'] = str((current_page - 1) * page_size)
                     response = requests.get(self.base_search_url, headers=header, params=params)
                     logger.info(f'inside inner while loop : {response.url}' )
                     if response.status_code == 200:
@@ -381,16 +384,19 @@ class FormIDX_search(FormIDX):
                     current_page += 1
                     # check if key hits exits
                     if 'hits' in results:
-                        results['hits'].extend(query_result['hits'])
+                        results['hits'].extend(query_result['hits']['hits'])
                     else:
-                        results['hits'] = [query_result['hits']]
+                        results['hits'] = query_result['hits']['hits']
                 current_page = 1
                 start_date = end_date + timedelta(days=1)
-                end_date = min(start_date + time_step, temp_end_date)
+                end_date = min(start_date + time_step, self.end_date)
                 params['startdt'] = start_date.strftime('%Y-%m-%d')
                 params['enddt'] = end_date.strftime('%Y-%m-%d')
+                params.pop('page', None)
+                params.pop('from', None)
                 logger.info(f"new start date: {params['startdt']}")
                 logger.info(f"new end date: {params['enddt']}")
+                # logger.info(results)
         return results
 
     def _parse_search_results(self, response: dict) -> dict:
@@ -404,14 +410,23 @@ class FormIDX_search(FormIDX):
     def index_to_files(self) -> List[File]:
         files = []
         hits = self.query_results['hits']
+
+        # write dictionary to json file
+        # with open('/Users/angus/git/external_tools/sec-utils/secutils/logfile.json', 'w') as logfile:
+        #     json.dump(hits, logfile, indent = 4)
+
+        logger.info(f"Creating index for {len(hits)} files.")
         for element in hits:
-            cik = element['source']['ciks']
-            if len(cik) > 1:
-                raise ValueError(f"Multiple CIK's found for result: {element['source']}")
-            company_name = element['source']['display_names']
-            form_type = element['source']['root_form']
-            date_filed = element['source']['file_date']
-            partial_url = element['source']['adsh']
+            # import pprint
+            # from pprint import pprint
+            # pprint(element)
+
+            cik = int(element['_source']['ciks'][0])
+            company_name = element['_source']['display_names'][0]
+            form_type = element['_source']['form']
+            date_filed = element['_source']['file_date']
+            adsh = element['_source']['adsh']
+            partial_url = f"edgar/data/{cik}/{adsh}.txt"
 
             files.append(File(
                     form_type=form_type,
@@ -421,6 +436,3 @@ class FormIDX_search(FormIDX):
                     partial_url=partial_url,
                 ))
         return files
-        
-
-

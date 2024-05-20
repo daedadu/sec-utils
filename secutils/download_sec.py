@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--end_year', type=str, help='Download end year')
     parser.add_argument('--quarters', default=-1, nargs='+', type=int, choices=[-1, 1, 2, 3, 4], 
                         help='Quarters of documents to download - if -1 then all quarters')
-    parser.add_argument('--log_level', default='INFO', choices=['INFO', 'ERROR', 'WARN'], help='Default logging level')
+    parser.add_argument('--log_level', default='INFO', choices=['INFO', 'ERROR', 'WARN', 'DEBUG'], help='Default logging level')
     parser.add_argument('--cache_dir', type=str, help='form idx cache dir')
     parser.add_argument('--ciks', nargs='+', type=int, help='List of CIKs to download')
     parser.add_argument('--cik_path', type=str, help='Path to CIK text file')
@@ -67,6 +67,8 @@ def main():
     # capture seen files to filter out of new files
     seen_files = scan_output_dir(args.output_dir)
     logger.info(f'Scanned output dir - located {len(seen_files)} downloaded files')
+    logger.debug(f'Files: {seen_files}')
+    
     # iterator of years/quarters
     
     if not look_for_search_term:
@@ -89,7 +91,9 @@ def main():
         #TODO fix this to allow for multiple form types
         files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
         sec_container.to_visit.update(files)
-    
+
+    # log the download urls of the files
+    logger.info(f'download url : {files[0].file_download_url}')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(download_docs(args.output_dir,loop,args.num_workers))
     later_as_datetime_obj = datetime.now()
