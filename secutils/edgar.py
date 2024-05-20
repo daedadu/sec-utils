@@ -135,8 +135,6 @@ class File(FileUtils, ValidateFields):
             outfile.write(line + '\n')
             outfile.close()
 
-
-
 class FormIDX(object):
     """
     FormIDX is a utility class to capture master.idx zip files and construct a parsable data structure.
@@ -432,3 +430,54 @@ class FormIDX_search(FormIDX):
                     partial_url=partial_url,
                 ))
         return files
+
+    class RSSFormIDX(object):
+        """
+        RSSFormIDX is a utility class to capture RSS feeds from SEC's EDGAR database and construct a parsable data structure.
+        """
+
+        base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar'
+        """
+        https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&datea=&dateb=&company=&type=8-K&SIC=&State=&Country=&CIK=&owner=include&accno=&start=0&count=80
+        """
+
+        def __init__(self, form_type: Optional[str]=None, start_date : Optional[datetime]=None, end_date : Optional[datetime]=None,
+                     company : Optional[str]=None, sic : Optional[str]=None, state : Optional[str]=None, counter : Optional[str]=None,
+                     cik : Optional[int]=None) -> None:
+
+            self.form_type = form_type
+            self.start_date = start_date
+            self.end_date = end_date
+            self.company = company
+            self.sic = sic
+            self.state = state
+            self.cik = cik
+            self.query_results = self._query_sec()
+
+        def _query_sec(self) -> dict:
+            """
+            Query the SEC's EDGAR database using the RSS feed and return a json object of the results.
+            """
+            params = {
+                'action': 'getcurrent',
+                'datea': self.start_date,
+                'dateb': self.end_date,
+                'company': self.company,
+                'type': self.form_type,
+                'SIC': self.sic,
+                'State': self.state,
+                'CIK': self.cik,
+                'owner': 'include',
+                'accno': '',
+                'start': 0,
+                'count': 80
+            }
+            response = requests.get(self.base_rss_url, params=params)
+            logger.info(f'Requesting : {response.url}')
+            if response.status_code == 200:
+                query_result = self._parse_rss_results(response.json())
+            else:
+                raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
+            return query_result
+
+
