@@ -6,16 +6,17 @@ from pathlib import Path
 from itertools import product
 from datetime import datetime
 from dateutil import parser as dateutil_parser
-import multiprocessing
 from typing import List
 
 from tqdm.auto import tqdm
 
-from secutils.edgar import FormIDX, FormIDX_search, SECContainer, download_docs
+from secutils.edgar import FormIDX, FormIDX_search, RSSFormIDX, SECContainer, download_docs
 from secutils.utils import scan_output_dir, _read_cik_config, yaml_config_to_args
+import asyncio
+
 
 logger = logging.getLogger(__name__)
-import asyncio
+
 
 
 def main():
@@ -33,6 +34,8 @@ def main():
     parser.add_argument('--cik_path', type=str, help='Path to CIK text file')
     parser.add_argument('--config_path', type=str, help='Path to yml config file')
     parser.add_argument('--search_term', type=str, help='search term to look for in forms')
+    parser.add_argument('--rss_feed', action='store_true', default=False, help='downloads the rss feed and passes the arguments')
+    
     args = parser.parse_args()
 
     look_for_search_term = False
@@ -70,27 +73,31 @@ def main():
     logger.debug(f'Files: {seen_files}')
     
     # iterator of years/quarters
-    
-    if not look_for_search_term:
-        start_year = dateutil_parser.parse(args.start_year).year
-        end_year = dateutil_parser.parse(args.end_year).year
-        years = list(range(start_year, end_year+1))
-        time = list(product(years, args.quarters))
-        for (yr, qtr) in tqdm(time, total=len(time)):
-            sec_container.year = yr
-            sec_container.quarter = qtr
-            logger.info(f'Downloading files - Year: {yr} - Quarter: {qtr}')
-            files = FormIDX(year=yr, quarter=qtr, seen_files=seen_files, cache_dir=args.cache_dir, 
-                   form_types=args.form_types, ciks=args.ciks).index_to_files()
-            if len(files) > 0:
-                sec_container.to_visit.update(files)
+
+    if not args.rss_feed:
+        if not look_for_search_term:
+            start_year = dateutil_parser.parse(args.start_year).year
+            end_year = dateutil_parser.parse(args.end_year).year
+            years = list(range(start_year, end_year+1))
+            time = list(product(years, args.quarters))
+            for (yr, qtr) in tqdm(time, total=len(time)):
+                sec_container.year = yr
+                sec_container.quarter = qtr
+                logger.info(f'Downloading files - Year: {yr} - Quarter: {qtr}')
+                files = FormIDX(year=yr, quarter=qtr, seen_files=seen_files, cache_dir=args.cache_dir, 
+                       form_types=args.form_types, ciks=args.ciks).index_to_files()
+                if len(files) > 0:
+                    sec_container.to_visit.update(files)
+        else:
+            logger.info(f'Searching for search term: {args.search_term}')
+            start_date = dateutil_parser.parse(args.start_year)
+            end_date = dateutil_parser.parse(args.end_year)
+            #TODO fix this to allow for multiple form types
+            files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
+            sec_container.to_visit.update(files)
     else:
-        logger.info(f'Searching for search term: {args.search_term}')
-        start_date = dateutil_parser.parse(args.start_year)
-        end_date = dateutil_parser.parse(args.end_year)
-        #TODO fix this to allow for multiple form types
-        files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
-        sec_container.to_visit.update(files)
+        logger.info(f'Downloading RSS feed')
+        RSSFormIDX(form_type=args.form_types[0])
 
     # log the download urls of the files
     logger.info(f'download url : {files[0].file_download_url}')
@@ -102,7 +109,7 @@ def main():
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
 
-    runtime_string = "The script took {}h:{}m:{}s.".format(hours,minutes,seconds)
+    runtime_string = "The script took {}h:{}m:{}s.".format(hours, minutes, seconds)
     logger.info(runtime_string)
 
 if __name__ == '__main__':

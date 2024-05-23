@@ -17,6 +17,7 @@ import asyncio
 import aiohttp
 import json
 from urllib.parse import urljoin
+import feedparser
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
@@ -431,53 +432,73 @@ class FormIDX_search(FormIDX):
                 ))
         return files
 
-    class RSSFormIDX(object):
+class RSSFormIDX(object):
+    """
+    RSSFormIDX is a utility class to capture RSS feeds from SEC's EDGAR database and construct a parsable data structure.
+    """
+
+    base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK={cik}&type={form_type}&company=&dateb=&owner=include&start=0&count=80&output=atom'
+
+
+    def __init__(
+            self,
+            form_type: Optional[str] = '',
+            start_date: Optional[datetime] = '',
+            end_date: Optional[datetime] = '',
+            company: Optional[str] = '',
+            sic: Optional[str] = '',
+            state: Optional[str] = '',
+            counter: Optional[str] = '',
+            cik: Optional[int] = ''
+    ) -> None:
+
+        self.form_type = form_type
+        self.start_date = start_date
+        self.end_date = end_date
+        self.company = company
+        self.sic = sic
+        self.state = state
+        self.cik = cik
+        self._get_last_modified_state()
+        self.query_results = self._query_sec()
+
+
+    def _get_last_modified_state(self):
+        if os.path.exists('last_modified.txt'):
+            with open('last_modified.txt', 'r') as file:
+                self.last_modified = file.read()
+        else:
+            self.last_modified = None
+
+    def _update_last_modified_state(self, last_modified: str):
+        with open('last_modified.txt', 'w') as file:
+            file.write(last_modified)
+
+    def _query_sec(self) -> dict:
         """
-        RSSFormIDX is a utility class to capture RSS feeds from SEC's EDGAR database and construct a parsable data structure.
+        Query the SEC's EDGAR database using the RSS feed and return a json object of the results.
         """
 
-        base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar'
-        """
-        https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&datea=&dateb=&company=&type=8-K&SIC=&State=&Country=&CIK=&owner=include&accno=&start=0&count=80
-        """
+        current_url = self.base_rss_url.format(cik=self.cik, form_type=self.form_type)
+        logger.info(f"Querying SEC database with RSS feed: {current_url}")
+        # if self.last_modified is not None:
+        #     response = feedparser.parse(current_url, modified=self.last_modified, agent = "MyApp/1.0 +http://example.com/")
+        # else:
+        #     response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
+        response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
 
-        def __init__(self, form_type: Optional[str]=None, start_date : Optional[datetime]=None, end_date : Optional[datetime]=None,
-                     company : Optional[str]=None, sic : Optional[str]=None, state : Optional[str]=None, counter : Optional[str]=None,
-                     cik : Optional[int]=None) -> None:
-
-            self.form_type = form_type
-            self.start_date = start_date
-            self.end_date = end_date
-            self.company = company
-            self.sic = sic
-            self.state = state
-            self.cik = cik
-            self.query_results = self._query_sec()
-
-        def _query_sec(self) -> dict:
-            """
-            Query the SEC's EDGAR database using the RSS feed and return a json object of the results.
-            """
-            params = {
-                'action': 'getcurrent',
-                'datea': self.start_date,
-                'dateb': self.end_date,
-                'company': self.company,
-                'type': self.form_type,
-                'SIC': self.sic,
-                'State': self.state,
-                'CIK': self.cik,
-                'owner': 'include',
-                'accno': '',
-                'start': 0,
-                'count': 80
-            }
-            response = requests.get(self.base_rss_url, params=params)
-            logger.info(f'Requesting : {response.url}')
-            if response.status_code == 200:
-                query_result = self._parse_rss_results(response.json())
+        if response.status == 200:
+            if response.bozo == False:
+                logger.info(f"Query successful. Found {len(response.entries)} entries.")
             else:
-                raise RuntimeError(f"Failed to query SEC database. Status code: {response.status_code} - Request header: {header}")
-            return query_result
+                raise RuntimeError(f"Failed to parse RSS feed. Error: {response.bozo_exception}")
+
+        else:
+            raise RuntimeError(f"Failed to query SEC database. Status code: {response.status} - Request header: {current_url}")
+
+        # logger.info(response)
+
+        self._update_last_modified_state(response.feed.modified)
+        return response
 
 
