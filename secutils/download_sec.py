@@ -96,7 +96,7 @@ def main():
             files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
             sec_container.to_visit.update(files)
     else:
-        logger.info(f'Downloading RSS feed')
+        logger.info('Downloading RSS feed')
         RSSFormIDX(form_type=args.form_types[0])
 
     # log the download urls of the files

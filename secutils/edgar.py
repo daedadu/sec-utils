@@ -18,6 +18,7 @@ import aiohttp
 import json
 from urllib.parse import urljoin
 import feedparser
+import pytz
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
@@ -443,36 +444,38 @@ class RSSFormIDX(object):
     def __init__(
             self,
             form_type: Optional[str] = '',
-            start_date: Optional[datetime] = '',
-            end_date: Optional[datetime] = '',
             company: Optional[str] = '',
-            sic: Optional[str] = '',
-            state: Optional[str] = '',
-            counter: Optional[str] = '',
             cik: Optional[int] = ''
     ) -> None:
 
+        self.rss_date_format = '%Y-%m-%dT%H:%M:%S%z'
         self.form_type = form_type
-        self.start_date = start_date
-        self.end_date = end_date
         self.company = company
-        self.sic = sic
-        self.state = state
         self.cik = cik
+        self.last_modified = None
         self._get_last_modified_state()
         self.query_results = self._query_sec()
 
-
     def _get_last_modified_state(self):
         if os.path.exists('last_modified.txt'):
-            with open('last_modified.txt', 'r') as file:
-                self.last_modified = file.read()
+            with open('last_modified.txt', 'r') as file_id:
+                berlin_date = datetime.strptime(file_id.read(), self.rss_date_format)
+                logger.info(f"Last modified date Berlin timem: {berlin_date}")
+                utc_minus_4_tz = pytz.timezone('Etc/GMT+4')
+                utc_minus_4_date = berlin_date.astimezone(utc_minus_4_tz)
+                self.last_modified = utc_minus_4_date.strftime(self.rss_date_format)
+                logger.info(f"Last modified date UTC-4 time: {self.last_modified}")
         else:
             self.last_modified = None
 
     def _update_last_modified_state(self, last_modified: str):
+        original_date = datetime.strptime(last_modified, self.rss_date_format)
+        logger.info(f"Original date: {original_date}")
+        berlin_tz = pytz.timezone('Europe/Berlin')
+        berlin_date = original_date.astimezone(berlin_tz)
+        logger.info(f"Berlin date: {berlin_date}")
         with open('last_modified.txt', 'w') as file:
-            file.write(last_modified)
+            file.write(berlin_date.strftime(self.rss_date_format))
 
     def _query_sec(self) -> dict:
         """
@@ -481,11 +484,13 @@ class RSSFormIDX(object):
 
         current_url = self.base_rss_url.format(cik=self.cik, form_type=self.form_type)
         logger.info(f"Querying SEC database with RSS feed: {current_url}")
-        # if self.last_modified is not None:
-        #     response = feedparser.parse(current_url, modified=self.last_modified, agent = "MyApp/1.0 +http://example.com/")
-        # else:
-        #     response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
-        response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
+        if self.last_modified is not None:
+            logger.info(f"Using last modified date: {self.last_modified}")
+            response = feedparser.parse(current_url, modified=self.last_modified, agent = "MyApp/1.0 +http://example.com/")
+        else:
+            logger.info(f"No last modified date found.")
+            response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
+        # response = feedparser.parse(current_url, agent = "MyApp/1.0 +http://example.com/")
 
         if response.status == 200:
             if response.bozo == False:
