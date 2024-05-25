@@ -438,7 +438,7 @@ class RSSFormIDX(object):
     RSSFormIDX is a utility class to capture RSS feeds from SEC's EDGAR database and construct a parsable data structure.
     """
 
-    base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK={cik}&type={form_type}&company=&dateb=&owner=include&start=&count=&output=atom'
+    base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK={cik}&type={form_type}&company=&dateb=&owner=include&start={start}&count={count}&output=atom'
 
 
     def __init__(
@@ -456,7 +456,10 @@ class RSSFormIDX(object):
         self.last_modified = None
         self._get_last_modified_state()
         self.search_term = search_term
+        self.start = 0
+        self.count = 100
         self.query_results = self._query_sec()
+
 
     def _convert_to_berlin_tz(self, date: str) -> str:
         berlin_tz = pytz.timezone('Europe/Berlin')
@@ -489,7 +492,7 @@ class RSSFormIDX(object):
         Query the SEC's EDGAR database using the RSS feed and return a json object of the results.
         """
 
-        current_url = self.base_rss_url.format(cik=self.cik, form_type=self.form_type)
+        current_url = self.base_rss_url.format(cik=self.cik, form_type=self.form_type, start=self.start, count=self.count)
         logger.info(f"Querying SEC database with RSS feed: {current_url}")
         if self.last_modified is not None:
             logger.info(f"Using last modified date: {self.last_modified} , Berlin time. {self._convert_to_berlin_tz(self.last_modified)}")
@@ -512,14 +515,14 @@ class RSSFormIDX(object):
         # logger.info(response)
 
         self._update_last_modified_state(response.feed.modified)
-        for element in response.entries:
-            logger.info(f"Title: {element.title}")
-            # logger.info(f"Link: {element.link}")
-            # logger.info(f"Published: {element.published}")
-            # logger.info(f"Updated: {element.updated}")
-            logger.info(f"Summary: {element.summary}")
+        # for element in response.entries:
+        #     logger.info(f"Title: {element.title}")
+        #     # logger.info(f"Link: {element.link}")
+        #     # logger.info(f"Published: {element.published}")
+        #     # logger.info(f"Updated: {element.updated}")
+        #     logger.info(f"Summary: {element.summary}")
 
-        logger.info(10*"-")
+        logger.info(100*"-")
 
         logger.info(f"search term: {self.search_term}")
         if self.search_term != '':
@@ -534,6 +537,8 @@ class RSSFormIDX(object):
             for element in filtered_list:
                 logger.info(f"Title: {element.title}")
                 logger.info(f"Summary: {element.summary}")
+                logger.info(f"Link: {element.link}")
+                logger.info(100*"-")
         else:
             filtered_list = response.entries
 
