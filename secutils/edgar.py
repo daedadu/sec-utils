@@ -438,14 +438,15 @@ class RSSFormIDX(object):
     RSSFormIDX is a utility class to capture RSS feeds from SEC's EDGAR database and construct a parsable data structure.
     """
 
-    base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK={cik}&type={form_type}&company=&dateb=&owner=include&start=0&count=80&output=atom'
+    base_rss_url = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK={cik}&type={form_type}&company=&dateb=&owner=include&start=&count=&output=atom'
 
 
     def __init__(
             self,
             form_type: Optional[str] = '',
             company: Optional[str] = '',
-            cik: Optional[int] = ''
+            cik: Optional[int] = '',
+            search_term: Optional[str] = '',
     ) -> None:
 
         self.rss_date_format = '%Y-%m-%dT%H:%M:%S%z'
@@ -454,28 +455,34 @@ class RSSFormIDX(object):
         self.cik = cik
         self.last_modified = None
         self._get_last_modified_state()
+        self.search_term = search_term
         self.query_results = self._query_sec()
+
+    def _convert_to_berlin_tz(self, date: str) -> str:
+        berlin_tz = pytz.timezone('Europe/Berlin')
+        original_date = datetime.strptime(date, self.rss_date_format)
+        berlin_date = original_date.astimezone(berlin_tz)
+        logger.info(f"Berlin time: {berlin_date}")
+        return berlin_date.strftime(self.rss_date_format)
+
+    def _convert_to_utc_minus_4_tz(self, date: str) -> str:
+        utc_minus_4_tz = pytz.timezone('Etc/GMT+4')
+        original_date = datetime.strptime(date, self.rss_date_format)
+        utc_minus_4_date = original_date.astimezone(utc_minus_4_tz)
+        logger.info(f"UTC-4 time: {self.last_modified}")
+        return utc_minus_4_date.strftime(self.rss_date_format)
 
     def _get_last_modified_state(self):
         if os.path.exists('last_modified.txt'):
             with open('last_modified.txt', 'r') as file_id:
-                berlin_date = datetime.strptime(file_id.read(), self.rss_date_format)
-                logger.info(f"Last modified date Berlin timem: {berlin_date}")
-                utc_minus_4_tz = pytz.timezone('Etc/GMT+4')
-                utc_minus_4_date = berlin_date.astimezone(utc_minus_4_tz)
-                self.last_modified = utc_minus_4_date.strftime(self.rss_date_format)
-                logger.info(f"Last modified date UTC-4 time: {self.last_modified}")
+                self.last_modified = self._convert_to_utc_minus_4_tz(file_id.read())
+
         else:
             self.last_modified = None
 
     def _update_last_modified_state(self, last_modified: str):
-        original_date = datetime.strptime(last_modified, self.rss_date_format)
-        logger.info(f"Original date: {original_date}")
-        berlin_tz = pytz.timezone('Europe/Berlin')
-        berlin_date = original_date.astimezone(berlin_tz)
-        logger.info(f"Berlin date: {berlin_date}")
         with open('last_modified.txt', 'w') as file:
-            file.write(berlin_date.strftime(self.rss_date_format))
+            file.write(self._convert_to_berlin_tz(last_modified))
 
     def _query_sec(self) -> dict:
         """
@@ -485,7 +492,8 @@ class RSSFormIDX(object):
         current_url = self.base_rss_url.format(cik=self.cik, form_type=self.form_type)
         logger.info(f"Querying SEC database with RSS feed: {current_url}")
         if self.last_modified is not None:
-            logger.info(f"Using last modified date: {self.last_modified}")
+            logger.info(f"Using last modified date: {self.last_modified} , Berlin time. {self._convert_to_berlin_tz(self.last_modified)}")
+
             response = feedparser.parse(current_url, modified=self.last_modified, agent = "MyApp/1.0 +http://example.com/")
         else:
             logger.info(f"No last modified date found.")
@@ -504,6 +512,32 @@ class RSSFormIDX(object):
         # logger.info(response)
 
         self._update_last_modified_state(response.feed.modified)
-        return response
+        for element in response.entries:
+            logger.info(f"Title: {element.title}")
+            # logger.info(f"Link: {element.link}")
+            # logger.info(f"Published: {element.published}")
+            # logger.info(f"Updated: {element.updated}")
+            logger.info(f"Summary: {element.summary}")
+
+        logger.info(10*"-")
+
+        logger.info(f"search term: {self.search_term}")
+        if self.search_term != '':
+            logger.info(f"Searching for search term: {self.search_term}")
+            if self.search_term.lower() == 'merger':
+                wanted_chapter = 'item 1.01'
+            else:
+                raise RuntimeError(f"Search term not found: {self.search_term}")
+
+            logger.info(f"Searching for chapter: {wanted_chapter}")
+            filtered_list = [entry for entry in response.entries if wanted_chapter in entry.summary.lower()]
+            for element in filtered_list:
+                logger.info(f"Title: {element.title}")
+                logger.info(f"Summary: {element.summary}")
+        else:
+            filtered_list = response.entries
+
+
+        return filtered_list
 
 
