@@ -42,7 +42,7 @@ async def download_docs(output_dir: Path,loop, num_workers, cache_dir: Optional[
     logger.info(f"Number of workers: {num_workers}")
     sem = asyncio.Semaphore(num_workers)
     async with aiohttp.ClientSession(loop=loop) as session:
-        await asyncio.gather(*[job[0].download_file(sem, session, job[1]) for job in jobs])
+        await asyncio.gather(*[job[0].download_file(sem, session, job[1], cache_dir) for job in jobs])
 
 
 
@@ -115,7 +115,7 @@ class File(FileUtils, ValidateFields):
             'Download File Path': getattr(self, 'download_file_dir', None)
         }, index=[0])
 
-    async def download_file(self, sem, session, output_dir) -> str:
+    async def download_file(self, sem, session, output_dir, cache_dir) -> str:
         rate = 1 # time unit on which the rate limiting is applied
         file_path = os.path.join(output_dir, self.file_name)
         headers = {
@@ -127,11 +127,13 @@ class File(FileUtils, ValidateFields):
             with open(file_path, "wb") as out:
                 async for chunk in response.content.iter_chunked(4096):
                     out.write(chunk)
+            if cache_dir is not None:
+                await self.write_log_record(cache_dir)
             await asyncio.sleep(rate)
 
-    def write_log_record(self, cache_dir: str):
+    async def write_log_record(self, cache_dir: str):
         parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter,
-                self.file_download_url, self.download_file_dir]
+                self.file_download_url]
         parts = list(map(str, parts))
         line = '|'.join(parts)
         with open(os.path.join(cache_dir, 'success.txt'), 'a') as outfile:
@@ -448,9 +450,11 @@ class RSSFormIDX(object):
             company: Optional[str] = '',
             cik: Optional[int] = '',
             search_term: Optional[str] = '',
+            cache_dir: Optional[str] = None
     ) -> None:
 
         self.rss_date_format = '%Y-%m-%dT%H:%M:%S%z'
+        self.cache_dir = _check_cache_dir(cache_dir)
         self.form_type = form_type
         self.company = company
         self.cik = cik
@@ -459,6 +463,7 @@ class RSSFormIDX(object):
         self.search_term = search_term
         self.start = 0
         self.count = 100
+        self.already_seen_hashes = []
         self.query_results = self._query_sec()
 
     def reset_page(self):
@@ -467,6 +472,16 @@ class RSSFormIDX(object):
     def get_next_page(self):
         self.start += self.count
         self.query_results = self._query_sec()
+
+    def _get_already_downloaded(self): # pragma: no cover
+        if self.cache_dir:
+            cache_file = os.path.join(self.cache_dir, 'rss-hashes.txt')
+        if self.cache_dir and os.path.exists(cache_file):
+            with open(cache_file, 'r') as file_id:
+                hashes = file_id.readlines()
+                hashes = [hash.strip() for hash in hashes]
+                self.already_seen_hashes = hashes
+
 
     def _convert_to_berlin_tz(self, date: str) -> str:
         berlin_tz = pytz.timezone('Europe/Berlin')
@@ -522,13 +537,6 @@ class RSSFormIDX(object):
         # logger.info(response)
 
         self._update_last_modified_state(response.feed.modified)
-        # for element in response.entries:
-        #     logger.info(f"Title: {element.title}")
-        #     # logger.info(f"Link: {element.link}")
-        #     # logger.info(f"Published: {element.published}")
-        #     # logger.info(f"Updated: {element.updated}")
-        #     logger.info(f"Summary: {element.summary}")
-
         logger.info(100*"-")
 
         logger.info(f"search term: {self.search_term}")
