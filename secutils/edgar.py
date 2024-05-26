@@ -133,7 +133,7 @@ class File(FileUtils, ValidateFields):
 
     async def write_log_record(self, cache_dir: str):
         parts = [self.cik_number, self.company_name, self.form_type, self.file_name, self.year, self.quarter,
-                self.file_download_url]
+                 self.date_filed, self.file_download_url]
         parts = list(map(str, parts))
         line = '|'.join(parts)
         with open(os.path.join(cache_dir, 'success.txt'), 'a') as outfile:
@@ -463,7 +463,7 @@ class RSSFormIDX(object):
         self.search_term = search_term
         self.start = 0
         self.count = 100
-        self.already_seen_hashes = []
+        self.already_downloaded_files = []
         self.query_results = self._query_sec()
 
     def reset_page(self):
@@ -475,13 +475,24 @@ class RSSFormIDX(object):
 
     def _get_already_downloaded(self): # pragma: no cover
         if self.cache_dir:
-            cache_file = os.path.join(self.cache_dir, 'rss-hashes.txt')
+            cache_file = os.path.join(self.cache_dir, 'success.txt')
         if self.cache_dir and os.path.exists(cache_file):
             with open(cache_file, 'r') as file_id:
-                hashes = file_id.readlines()
-                hashes = [hash.strip() for hash in hashes]
-                self.already_seen_hashes = hashes
-
+                # read | separated lines into list
+                temp = file_id.readlines()
+            for line in temp:
+                elements = line.split('|')
+                cik = int(elements[0])
+                adsh = elements[3].replace('.txt', '')
+                self.already_downloaded_files.append(
+                    File(
+                        form_type=elements[2],
+                        company_name=elements[1],
+                        cik_number=cik,
+                        date_filed=elements[6],
+                        partial_url=f"edgar/data/{cik}/{adsh}"
+                    )
+                )
 
     def _convert_to_berlin_tz(self, date: str) -> str:
         berlin_tz = pytz.timezone('Europe/Berlin')
