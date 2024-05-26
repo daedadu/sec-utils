@@ -16,9 +16,10 @@ import httplib2
 import asyncio
 import aiohttp
 import json
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import feedparser
 import pytz
+import re
 
 from secutils.utils import (
     _to_quarter, ValidateFields,
@@ -463,8 +464,9 @@ class RSSFormIDX(object):
     def reset_page(self):
         self.start = 0
 
-    def next_page(self):
+    def get_next_page(self):
         self.start += self.count
+        self.query_results = self._query_sec()
 
     def _convert_to_berlin_tz(self, date: str) -> str:
         berlin_tz = pytz.timezone('Europe/Berlin')
@@ -544,3 +546,37 @@ class RSSFormIDX(object):
 
 
         return filtered_list
+
+    def index_to_files(self) -> List[File]:
+        files = []
+        hits = self.query_results
+
+        logger.info(f"Creating file list for {len(hits)} files.")
+        for element in hits:
+            # https://www.sec.gov/Archives/edgar/data/1067701/000110465924065194/0001104659-24-065194-index.htm
+            path_parts = urlparse(element.link).path.split('/')
+            # "8-K - MULLEN AUTOMOTIVE INC. (0001499961) (Filer)"
+            pattern = r'^(.*?) - (.*?) \(\d+\) \(Filer\)$'
+            matched = re.match(pattern, element.title)
+
+            cik = int(path_parts[4])
+            if matched :
+                form_type = matched.group(1)
+                company_name = matched.group(2)
+            else:
+                raise RuntimeError(f"Failed to parse title: {element.title}")
+
+            # 2024-05-24T17:28:17-04:00 but we want 2024-05-24 and timezone is ignored
+            date_filed = datetime.strptime(element.updated, self.rss_date_format).strftime('%Y-%m-%d')
+
+            adsh = path_parts[6].replace('-index.htm', '')
+            partial_url = f"edgar/data/{cik}/{adsh}.txt"
+
+            files.append(File(
+                    form_type=form_type,
+                    company_name=company_name,
+                    cik_number=cik,
+                    date_filed=date_filed,
+                    partial_url=partial_url,
+                ))
+        return files

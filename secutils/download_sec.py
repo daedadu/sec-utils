@@ -99,17 +99,17 @@ def main():
         
         if not look_for_search_term:
             logger.info('Downloading RSS feed, no search term defined')
-            RSSFormIDX(form_type=args.form_types[0])
+            files = RSSFormIDX(form_type=args.form_types[0]).index_to_files()
         else:
             logger.info(f'Searching for search term: {args.search_term}')
             if args.search_term.lower() == 'merger':
                 search_term = 'item 1.01'
             else:
                 raise ValueError('Search term not recognized')
-            RSSFormIDX(form_type=args.form_types[0], search_term=search_term)
+            files = RSSFormIDX(form_type=args.form_types[0], search_term=search_term).index_to_files()
+        sec_container.to_visit.update(files)
 
-    # log the download urls of the files
-    logger.info(f'download url : {files[0].file_download_url}')
+    logger.info(f'Files to download: {len(sec_container.to_visit)}')          
     loop = asyncio.get_event_loop()
     loop.run_until_complete(download_docs(args.output_dir,loop,args.num_workers))
     later_as_datetime_obj = datetime.now()
