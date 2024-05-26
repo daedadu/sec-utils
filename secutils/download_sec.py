@@ -102,7 +102,11 @@ def main():
             RSSFormIDX(form_type=args.form_types[0])
         else:
             logger.info(f'Searching for search term: {args.search_term}')
-            RSSFormIDX(form_type=args.form_types[0], search_term=args.search_term)
+            if args.search_term.lower() == 'merger':
+                search_term = 'item 1.01'
+            else:
+                raise ValueError('Search term not recognized')
+            RSSFormIDX(form_type=args.form_types[0], search_term=search_term)
 
     # log the download urls of the files
     logger.info(f'download url : {files[0].file_download_url}')

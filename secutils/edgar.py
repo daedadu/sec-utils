@@ -460,6 +460,11 @@ class RSSFormIDX(object):
         self.count = 100
         self.query_results = self._query_sec()
 
+    def reset_page(self):
+        self.start = 0
+
+    def next_page(self):
+        self.start += self.count
 
     def _convert_to_berlin_tz(self, date: str) -> str:
         berlin_tz = pytz.timezone('Europe/Berlin')
@@ -527,13 +532,8 @@ class RSSFormIDX(object):
         logger.info(f"search term: {self.search_term}")
         if self.search_term != '':
             logger.info(f"Searching for search term: {self.search_term}")
-            if self.search_term.lower() == 'merger':
-                wanted_chapter = 'item 1.01'
-            else:
-                raise RuntimeError(f"Search term not found: {self.search_term}")
 
-            logger.info(f"Searching for chapter: {wanted_chapter}")
-            filtered_list = [entry for entry in response.entries if wanted_chapter in entry.summary.lower()]
+            filtered_list = [entry for entry in response.entries if self.search_term in entry.summary.lower()]
             for element in filtered_list:
                 logger.info(f"Title: {element.title}")
                 logger.info(f"Summary: {element.summary}")
@@ -544,5 +544,3 @@ class RSSFormIDX(object):
 
 
         return filtered_list
-
-
