@@ -70,10 +70,8 @@ def main():
     # capture seen files to filter out of new files
     seen_files = scan_output_dir(args.output_dir)
     logger.info(f'Scanned output dir - located {len(seen_files)} downloaded files')
-    logger.debug(f'Files: {seen_files}')
+    logger.info(f'Files: {seen_files}')
     
-    # iterator of years/quarters
-
     if not args.rss_feed:
         if not look_for_search_term:
             start_year = dateutil_parser.parse(args.start_year).year
@@ -96,17 +94,22 @@ def main():
             files = FormIDX_search(form_type=args.form_types[0], start_date=start_date, end_date=end_date, search_term=args.search_term).index_to_files()
             sec_container.to_visit.update(files)
     else:
-        
         if not look_for_search_term:
             logger.info('Downloading RSS feed, no search term defined')
-            files = RSSFormIDX(form_type=args.form_types[0]).index_to_files()
+            search_term = None
         else:
             logger.info(f'Searching for search term: {args.search_term}')
             if args.search_term.lower() == 'merger':
                 search_term = 'item 1.01'
             else:
                 raise ValueError('Search term not recognized')
-            files = RSSFormIDX(form_type=args.form_types[0], search_term=search_term).index_to_files()
+        
+        temp = RSSFormIDX(form_type=args.form_types[0],seen_files=seen_files,search_term=search_term)
+        files = []
+        while not temp.already_downloaded:
+            files.extend(temp.index_to_files())
+            logger.info('Getting next page of RSS feed')
+            temp.get_next_page()
         sec_container.to_visit.update(files)
 
     logger.info(f'Files to download: {len(sec_container.to_visit)}')          

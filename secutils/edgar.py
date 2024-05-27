@@ -450,11 +450,13 @@ class RSSFormIDX(object):
             company: Optional[str] = '',
             cik: Optional[int] = '',
             search_term: Optional[str] = '',
-            cache_dir: Optional[str] = None
+            cache_dir: Optional[str] = None,
+            seen_files: Optional[List[str]] = None
     ) -> None:
 
         self.rss_date_format = '%Y-%m-%dT%H:%M:%S%z'
         self.cache_dir = _check_cache_dir(cache_dir)
+        self.seen_files = seen_files
         self.form_type = form_type
         self.company = company
         self.cik = cik
@@ -464,6 +466,7 @@ class RSSFormIDX(object):
         self.start = 0
         self.count = 100
         self.already_downloaded_files = []
+        self.already_downloaded = False
         self.query_results = self._query_sec()
 
     def reset_page(self):
@@ -474,6 +477,7 @@ class RSSFormIDX(object):
         self.query_results = self._query_sec()
 
     def _get_already_downloaded(self): # pragma: no cover
+        # gets the downloaded files from the success.txt file
         if self.cache_dir:
             cache_file = os.path.join(self.cache_dir, 'success.txt')
         if self.cache_dir and os.path.exists(cache_file):
@@ -557,14 +561,24 @@ class RSSFormIDX(object):
             filtered_list = [entry for entry in response.entries if self.search_term in entry.summary.lower()]
             for element in filtered_list:
                 logger.info(f"Title: {element.title}")
-                logger.info(f"Summary: {element.summary}")
+                logger.debug(f"Summary: {element.summary}")
                 logger.info(f"Link: {element.link}")
-                logger.info(100*"-")
+                logger.debug(100*"-")
         else:
             filtered_list = response.entries
-
-
+        logger.info(100*"-")
         return filtered_list
+
+    def _in_seen_files(self, adsh: str) -> bool:
+        #  is the adsh already downloaded
+        if self.seen_files:
+            potential_file_name = f"{adsh}.txt"
+            if potential_file_name in self.seen_files:
+                return True
+            else:
+                return False
+        else:
+            return False
 
     def index_to_files(self) -> List[File]:
         files = []
@@ -591,11 +605,17 @@ class RSSFormIDX(object):
             adsh = path_parts[6].replace('-index.htm', '')
             partial_url = f"edgar/data/{cik}/{adsh}.txt"
 
-            files.append(File(
-                    form_type=form_type,
-                    company_name=company_name,
-                    cik_number=cik,
-                    date_filed=date_filed,
-                    partial_url=partial_url,
-                ))
+            self.already_downloaded = self._in_seen_files(adsh)
+            if not self.already_downloaded:
+                files.append(File(
+                        form_type=form_type,
+                        company_name=company_name,
+                        cik_number=cik,
+                        date_filed=date_filed,
+                        partial_url=partial_url,
+                    ))
+            else:
+                logger.info(f"File already downloaded: {adsh}.txt")
+                return files
+
         return files
