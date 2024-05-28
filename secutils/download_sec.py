@@ -112,9 +112,23 @@ def main():
             temp.get_next_page()
         sec_container.to_visit.update(files)
 
+    
     logger.info(f'Files to download: {len(sec_container.to_visit)}')          
     loop = asyncio.get_event_loop()
     loop.run_until_complete(download_docs(args.output_dir,loop,args.num_workers,args.cache_dir))
+
+    if args.rss_feed and look_for_search_term:
+        for element in files:
+            file_path = Path(args.output_dir) / element.form_type.replace('/','') / str(element.year) / f'{element.quarter}' / element.file_name
+            logger.info(f'checking {file_path}')
+            with open(file_path, 'r') as handle:
+                data = handle.read()
+            if args.search_term.lower() not in data.lower():
+                logger.info(f'{args.search_term} not found in {file_path}')
+                logger.info(f'File will be removed')
+                os.remove(file_path)
+                    
+        
     later_as_datetime_obj = datetime.now()
     time_difference = later_as_datetime_obj - now_as_datetime_obj
     total_seconds = time_difference.seconds
